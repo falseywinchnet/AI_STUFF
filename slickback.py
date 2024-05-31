@@ -1,7 +1,8 @@
 #Why does a pimp need a surveillance center? (C) MIT licensed joshuah rainstar 2024 
 #"simple" is for purely linear networks without batching or activation functions.
 #I also recommend for your first layer in any 2d network you do x = torch.fft.fftshift(torch.fft.ifft2(x).real) + x
-#it improves accuracy and accelerates convergence
+#What is slickback? 
+#it is an improved optimizer(relative to adam) which accelerates convergence
 
 class Slickback:
     #https://github.com/falseywinchnet/AI_STUFF
