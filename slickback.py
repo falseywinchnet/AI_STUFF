@@ -29,8 +29,9 @@ class Slickback:
         else:
             self.adam_step()
 
-    def simple_step(self):
+        def simple_step(self):
         for i, param in enumerate(self.params):
+                
                 if param.grad is not None:
                   stx = torch.std(param.grad).item()
                   while stx < 0.1:
@@ -41,7 +42,7 @@ class Slickback:
                   else:
                     grad = param.grad/(sty)
 
-                if self.grad_history[param] is not None:
+                  if self.grad_history[param] is not None:
                     sign_change = (self.grad_history[param] * grad).lt(0)
                     if sign_change.any():
                         max_shift = abs(grad) / 2
@@ -50,8 +51,8 @@ class Slickback:
                         if self.max_shifts[param] is not None:
                             grad = torch.clamp(grad, min=-self.max_shifts[param], max=self.max_shifts[param])
 
-                self.grad_history[param] = grad.clone()
-                param.data -= grad
+                  self.grad_history[param] = grad.clone()
+                  param.data -= grad
 
     def adam_step(self):
         beta1, beta2 = self.betas
