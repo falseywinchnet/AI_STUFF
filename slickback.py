@@ -34,14 +34,16 @@ class Slickback:
                 
                 if param.grad is not None:
                   stx = torch.std(param.grad).item()
-                  if stx != 0:
+                  if stx >0:
                     while stx < 0.1:
                       stx = stx * 10
                   sty = torch.norm(param.grad).item()
                   if stx>sty:
                     grad = param.grad * (stx **0.1)
                   else:
-                    grad = param.grad/(sty)
+                    if sty >0:
+                        grad = param.grad/(sty)
+                    #catch possible errors
 
                   if self.grad_history[param] is not None:
                     sign_change = (self.grad_history[param] * grad).lt(0)
