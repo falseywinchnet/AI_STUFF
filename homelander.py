@@ -1,5 +1,5 @@
 #Why does a pimp need a surveillance center? (C) MIT licensed joshuah rainstar 2024 
-#SLICKBACK is a refined adam/SGD optimizer that attempts to find and follow the optimal descent rate.
+#HOMELANDER is a refined adam/SGD optimizer that attempts to find and follow the optimal descent rate.
 #it does this through not being stupid
 #is not issued with any guarantees to be useful for ur purposes.
 #you can try simple, its an alternative approach to SGD for simple networks,
@@ -7,8 +7,26 @@
 #basically some NN do horrible with adam and others do horrible with simple converge, here you have alternatives to both
 #I  recommend before your first layer in any 2d object recognition network you do x = torch.fft.fftshift(torch.fft.ifft2(x).real) + x
 #https://www.youtube.com/watch?v=47jKGHZfplY
+#how to measure benefit?
+'''
+import numpy as np
+from scipy.integrate import quad
 
-class Slickback:
+# Define the parameters
+p_0 = 0.5
+lambda_ = 0.1
+T = 100
+
+# Define the improvement factor function
+def improvement_factor(t):
+    return 1 / (1 - (p_0 * np.exp(-lambda_ * t) / 2))
+
+# Perform the integration
+total_improvement, _ = quad(improvement_factor, 0, T)
+
+total_improvement
+'''
+class Homelander:
     #https://github.com/falseywinchnet/AI_STUFF
    def __init__(self, params, lr=0.001, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, simple=False):
         self.params = list(params)
