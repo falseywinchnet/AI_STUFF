@@ -1,10 +1,11 @@
 #Why does a pimp need a surveillance center? (C) MIT licensed joshuah rainstar 2024 
-#"simple" is for purely linear networks without batching or activation functions.
-#I also recommend for your first layer in any 2d network you do x = torch.fft.fftshift(torch.fft.ifft2(x).real) + x
-#What is slickback? 
-#it is an improved optimizer(relative to adam/sgd) which accelerates convergence through identifying overshoot and incremental progression
+#SLICKBACK is a refined adam/SGD optimizer that attempts to find and follow the optimal descent rate.
+#it does this through not being stupid
+#is not issued with any guarantees to be useful for ur purposes.
+#"simple" is for purely linear networks without batching or activation functions that you usually just do param.data -= param.grad
+#try it! if your first epoch doesn't beat your conventional approach you probably want simple turned off.
+#I  recommend before your first layer in any 2d object recognition network you do x = torch.fft.fftshift(torch.fft.ifft2(x).real) + x
 #https://www.youtube.com/watch?v=47jKGHZfplY
-#if you're using SGD for a simple linear network with no gates, try simple mode. it can be faster than sgd
 
 class Slickback:
     #https://github.com/falseywinchnet/AI_STUFF
