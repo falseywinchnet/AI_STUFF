@@ -1,5 +1,5 @@
 # (C) MIT licensed joshuah rainstar 2024 
-# doubles convergence rate but only adds O(N) complexity operations
+# doubles convergence rate for some networks(tested on MINST CNN, linear network) but only adds O(N) complexity operations
 #is so obvious you're gonna ask yourself how come we aint been doin it already
 #use simple=True for non-gated linear networks only
 #additional tip for 2d convolve: try  x = torch.fft.fftshift(torch.fft.ifft2(x).real) + x for the first operation
