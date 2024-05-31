@@ -6,7 +6,6 @@
 #and for gated or nonlinear networks simple is not guaranteed to converge at all
 #basically some NN do horrible with adam and others do horrible with simple converge, here you have alternatives to both
 #I  recommend before your first layer in any 2d object recognition network you do x = torch.fft.fftshift(torch.fft.ifft2(x).real) + x
-#https://www.youtube.com/watch?v=47jKGHZfplY
 #how to measure benefit?
 '''
 import numpy as np
