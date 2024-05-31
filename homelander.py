@@ -3,11 +3,7 @@
 #is so obvious you're gonna ask yourself how come we aint been doin it already
 #use simple=True for non-gated linear networks only
 #additional tip for 2d convolve: try  x = torch.fft.fftshift(torch.fft.ifft2(x).real) + x for the first operation
-#I  recommend before your first layer in any 2d object recognition network you do x = torch.fft.fftshift(torch.fft.ifft2(x).real) + x
 
-'''
-
-'''
 class Homelander:
     #https://github.com/falseywinchnet/AI_STUFF
    def __init__(self, params, lr=0.001, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, simple=False):
