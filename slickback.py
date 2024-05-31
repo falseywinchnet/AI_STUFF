@@ -2,8 +2,8 @@
 #SLICKBACK is a refined adam/SGD optimizer that attempts to find and follow the optimal descent rate.
 #it does this through not being stupid
 #is not issued with any guarantees to be useful for ur purposes.
-#you can try simple, its an alternative approach to SGD for simple networks, but it may not converge quicker than modified adam
-
+#you can try simple, its an alternative approach to SGD for simple networks,
+#and for gated or nonlinear networks it is not guaranteed to converge at all
 #I  recommend before your first layer in any 2d object recognition network you do x = torch.fft.fftshift(torch.fft.ifft2(x).real) + x
 #https://www.youtube.com/watch?v=47jKGHZfplY
 
