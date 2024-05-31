@@ -34,8 +34,9 @@ class Slickback:
                 
                 if param.grad is not None:
                   stx = torch.std(param.grad).item()
-                  while stx < 0.1:
-                    stx = stx * 10
+                  if stx != 0:
+                    while stx < 0.1:
+                      stx = stx * 10
                   sty = torch.norm(param.grad).item()
                   if stx>sty:
                     grad = param.grad * (stx **0.1)
