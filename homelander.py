@@ -1,13 +1,10 @@
-#Why does a pimp need a surveillance center? (C) MIT licensed joshuah rainstar 2024 
-#HOMELANDER is a refined adam/SGD optimizer that attempts to find and follow the optimal descent rate.
-#it does this through not being stupid
-#is not issued with any guarantees to be useful for ur purposes.
-#you can try simple, its an alternative approach to SGD for simple networks,
-#and for gated or nonlinear networks simple is not guaranteed to converge at all
-#basically some NN do horrible with adam and others do horrible with simple converge, here you have alternatives to both
+# (C) MIT licensed joshuah rainstar 2024 
+# doubles convergence rate but only adds O(N) complexity operations
+#is so obvious you're gonna ask yourself how come we aint been doin it already
+#use simple=True for non-gated linear networks only
+#additional tip for 2d convolve: try  x = torch.fft.fftshift(torch.fft.ifft2(x).real) + x for the first operation
 #I  recommend before your first layer in any 2d object recognition network you do x = torch.fft.fftshift(torch.fft.ifft2(x).real) + x
-#actual benefit? halves the distance traversed in the gradient descent, which doubles your rate of convergence.
-#amount of work involved grows in a linear fashion, making this method practical.
+
 '''
 
 '''
