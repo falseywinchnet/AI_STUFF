@@ -38,7 +38,7 @@ class Slickback:
                   if stx>sty:
                     grad = param.grad * (stx **0.1)
                   else:
-                    grad = param.grad/(sty/2)
+                    grad = param.grad/(sty)
 
                 if self.grad_history[param] is not None:
                     sign_change = (self.grad_history[param] * grad).lt(0)
