@@ -1,8 +1,11 @@
 # (C) MIT licensed joshuah rainstar 2024 
 # doubles convergence rate for some networks(tested on MINST CNN, linear network) but only adds O(N) complexity operations
 #is so obvious you're gonna ask yourself how come we aint been doin it already
+#the biggest change here is that what we do is if we see a zero crossing(in the gradient!)
+#it means that we are oscillating, so every time that happens we clamp the gradient to one-half in subsequent updates.
+#we do this recursively to ensure that oscillatory over-steps converge to the target.
 #it may be necessary to periodically unset gradhistory and max_shifts, but my testing has not demonstrated a benefit
-#use simple=True for non-gated linear networks only
+#use simple=True for non-gated linear networks only, experimental approach
 #additional tip for 2d convolve: try  x = torch.fft.fftshift(torch.fft.ifft2(x).real) + x for the first operation
 
 class Homelander:
