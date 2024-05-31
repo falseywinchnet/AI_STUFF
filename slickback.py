@@ -3,7 +3,8 @@
 #it does this through not being stupid
 #is not issued with any guarantees to be useful for ur purposes.
 #you can try simple, its an alternative approach to SGD for simple networks,
-#and for gated or nonlinear networks it is not guaranteed to converge at all
+#and for gated or nonlinear networks simple is not guaranteed to converge at all
+#basically some NN do horrible with adam and others do horrible with simple converge, here you have alternatives to both
 #I  recommend before your first layer in any 2d object recognition network you do x = torch.fft.fftshift(torch.fft.ifft2(x).real) + x
 #https://www.youtube.com/watch?v=47jKGHZfplY
 
