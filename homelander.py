@@ -10,7 +10,7 @@
 
 class Homelander:
     #https://github.com/falseywinchnet/AI_STUFF
-   def __init__(self, params, lr=0.001, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, simple=False):
+    def __init__(self, params, lr=0.001, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, simple=False):
         self.params = list(params)
         self.lr = lr
         self.betas = betas
@@ -31,7 +31,7 @@ class Homelander:
             self.adam_step()
 
         def simple_step(self):
-        for i, param in enumerate(self.params):
+          for i, param in enumerate(self.params):
                 
                 if param.grad is not None:
                   stx = torch.std(param.grad).item()
