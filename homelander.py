@@ -54,7 +54,8 @@ class Homelander:
                         max_shift = abs(grad) / 2
                         self.max_shifts[param] = max_shift
                         #optional: here, test if maxshifts is not none
-                        #if so, make the new maxshifts even smaller
+                        #if so, make the new maxshifts even smaller, say, divide by 0.4
+                        #this may slow down convergence slightly but prevent overshoot better
                     else:
                         if self.max_shifts[param] is not None:
                             grad = torch.clamp(grad, min=-self.max_shifts[param], max=self.max_shifts[param])
