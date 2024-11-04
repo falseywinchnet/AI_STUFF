@@ -159,7 +159,7 @@ class RCO:
         # Average the two methods and update with Adam
         for i, (p, rk4_u, cheb_u) in enumerate(zip(self.model.parameters(), rk4_update, cheb_update)):
             update = (rk4_u + cheb_u)/2            
-            p.data-=  update / self.lr
+            p.data-=  update * self.lr
             p.grad.zero_()
             
         # Final loss computation for tracking
