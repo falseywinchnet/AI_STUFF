@@ -165,3 +165,144 @@ class RCO:
         # Final loss computation for tracking
         final_loss = self.compute_loss(x, y)
         return final_loss.item()
+
+
+
+from torch.optim.optimizer import Optimizer
+import torch
+import math
+
+class RCO_Batching(Optimizer):
+    """
+    Runge-Kutta-Chebyshev Optimizer (RCO) with batching support and scheduler compatibility
+    """
+    def __init__(self, params, loss_function=None, lr=1e-3, eps=1e-8, 
+                 accumulation_steps=1, max_batch_size=None):
+        defaults = dict(lr=lr, eps=eps)
+        super(RCO, self).__init__(params, defaults)
+        
+        self.accumulation_steps = accumulation_steps
+        self.max_batch_size = max_batch_size
+        self.loss_function = loss_function or torch.nn.CrossEntropyLoss()
+        
+        # Initialize step counter for scheduler compatibility
+        self.state['step'] = 0
+        
+        # Pre-compute tensor constants on cuda if available
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.pi_tensor = torch.tensor(math.pi, device=device)
+        
+        # Chebyshev weights (convert to tensors)
+        sqrt_5 = torch.sqrt(torch.tensor(5.0, device=device))
+        self.w1 = self.w2 = (18 + 5*sqrt_5)/72
+        self.w3 = self.w4 = (18 - 5*sqrt_5)/72
+
+    def compute_loss(self, x, y):
+        """Compute loss for a batch of data"""
+        outputs = self.model(x)
+        return self.loss_function(outputs, y)
+    
+    def _split_batch(self, x, y):
+        """Split large batches into smaller ones if needed"""
+        if self.max_batch_size is None or x.size(0) <= self.max_batch_size:
+            return [(x, y)]
+            
+        num_splits = (x.size(0) + self.max_batch_size - 1) // self.max_batch_size
+        x_splits = torch.split(x, self.max_batch_size)
+        y_splits = torch.split(y, self.max_batch_size)
+        return list(zip(x_splits, y_splits))
+
+    def step(self, closure=None):
+        """
+        Performs a single optimization step.
+        
+        Args:
+            closure (callable): A closure that reevaluates the model and returns the loss.
+        """
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+        
+        for group in self.param_groups:
+            for p in group['params']:
+                if p.grad is None:
+                    continue
+                
+                effective_lr = group['lr'] / self.accumulation_steps
+                
+                # Store original params
+                orig_param = p.data.clone()
+                
+                # Initial k1
+                k1 = p.grad.clone()
+                
+                # RK4 steps
+                # k2 position
+                p.data.add_(k1, alpha=-effective_lr/2)
+                if closure is not None:
+                    with torch.enable_grad():
+                        closure()
+                k2_rk4 = p.grad.clone()
+                p.data.copy_(orig_param)
+                
+                # k3 position
+                p.data.add_(k2_rk4, alpha=-effective_lr/3)
+                if closure is not None:
+                    with torch.enable_grad():
+                        closure()
+                k3_rk4 = p.grad.clone()
+                p.data.copy_(orig_param)
+                
+                # k4 position
+                p.data.add_(k3_rk4, alpha=-effective_lr)
+                if closure is not None:
+                    with torch.enable_grad():
+                        closure()
+                k4_rk4 = p.grad.clone()
+                
+                # Chebyshev steps
+                # Compute nodes
+                c1 = effective_lr * (1 + torch.cos(3*self.pi_tensor/8))/2
+                c2 = effective_lr * (1 + torch.cos(self.pi_tensor/8))/2
+                c3 = effective_lr * (1 - torch.cos(self.pi_tensor/8))/2
+                
+                # k2 Cheb
+                p.data.copy_(orig_param)
+                p.data.add_(k1, alpha=-c1)
+                if closure is not None:
+                    with torch.enable_grad():
+                        closure()
+                k2_cheb = p.grad.clone()
+                
+                # k3 Cheb
+                p.data.copy_(orig_param)
+                p.data.add_(k2_cheb, alpha=-c2)
+                if closure is not None:
+                    with torch.enable_grad():
+                        closure()
+                k3_cheb = p.grad.clone()
+                
+                # k4 Cheb
+                p.data.copy_(orig_param)
+                p.data.add_(k3_cheb, alpha=-c3)
+                if closure is not None:
+                    with torch.enable_grad():
+                        closure()
+                k4_cheb = p.grad.clone()
+                
+                # Combine RK4 result
+                rk4_update = (k1 + 2*k2_rk4 + 2*k3_rk4 + k4_rk4)/6
+                
+                # Combine Cheb result
+                cheb_update = (self.w1*k1 + self.w2*k2_cheb + self.w3*k3_cheb + self.w4*k4_cheb)
+                
+                # Average the updates and apply
+                update = (rk4_update + cheb_update)/2
+                p.data = orig_param - effective_lr * update
+
+        return loss
+
+    def get_lr(self):
+        """Returns current learning rate for scheduler compatibility"""
+        return [group['lr'] for group in self.param_groups]
