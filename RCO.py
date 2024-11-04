@@ -179,6 +179,7 @@ import math
 class RCO_Batching(Optimizer):
     """
     Runge-Kutta-Chebyshev Optimizer (RCO) with batching support, featuring self-decaying learning rate
+    some problems require clamping- i have added clamping.
     """
     def __init__(self, model, max_batch_size=None):
         self.model = model
@@ -218,10 +219,12 @@ class RCO_Batching(Optimizer):
           self.lr2 = max(self.lr2 * 0.9995, 0.5)
         else:
           self.lr2 = min(self.lr2 * 1.0001, 1.0)
-        
+        self.odd = not self.odd
         # Initial k1
         loss = self.compute_loss(x, y)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
+
         k1 = [p.grad.clone() for p in self.model.parameters()]
         
         # Store original params
@@ -232,6 +235,8 @@ class RCO_Batching(Optimizer):
             p.data -= k * (6 * self.lr2)
         loss = self.compute_loss(x, y)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
+
         k2_rk4 = [p.grad.clone() for p in self.model.parameters()]
         
         # Reset and move to k3 position
@@ -241,6 +246,8 @@ class RCO_Batching(Optimizer):
             p.data -= k * (4 * self.lr2)
         loss = self.compute_loss(x, y)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
+
         k3_rk4 = [p.grad.clone() for p in self.model.parameters()]
         
         # Reset and move to k4
@@ -250,6 +257,8 @@ class RCO_Batching(Optimizer):
             p.data -= k * (12 * self.lr2)
         loss = self.compute_loss(x, y)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
+
         k4_rk4 = [p.grad.clone() for p in self.model.parameters()]
         
         # Chebyshev steps
@@ -266,7 +275,10 @@ class RCO_Batching(Optimizer):
         for p, k in zip(self.model.parameters(), k1):
             p.data -= k * c1
         loss = self.compute_loss(x, y)
+
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
+
         k2_cheb = [p.grad.clone() for p in self.model.parameters()]
         
         # k3 Cheb
@@ -276,6 +288,8 @@ class RCO_Batching(Optimizer):
             p.data -= k * c2
         loss = self.compute_loss(x, y)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
+
         k3_cheb = [p.grad.clone() for p in self.model.parameters()]
         
         # k4 Cheb
@@ -285,12 +299,14 @@ class RCO_Batching(Optimizer):
             p.data -= k * c3
         loss = self.compute_loss(x, y)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
+
         k4_cheb = [p.grad.clone() for p in self.model.parameters()]
 
         # Combine RK4 result
         rk4_update = []
         for k1_p, k2_p, k3_p, k4_p in zip(k1, k2_rk4, k3_rk4, k4_rk4):
-            update = (k1_p + 2*k2_p + 2*k3_p + k4_p)/(6*self.lr2)
+            update = (k1_p + 2*k2_p + 3*k3_p + k4_p)/(6*self.lr2)
             rk4_update.append(update)
             
         # Combine Cheb result
@@ -302,7 +318,7 @@ class RCO_Batching(Optimizer):
         # Average the two methods and apply final update
         for i, (p, rk4_u, cheb_u) in enumerate(zip(self.model.parameters(), rk4_update, cheb_update)):
             update = (rk4_u + cheb_u)/2
-            p.data -= update * (12 * self.lr2)
+            p.data -= update * 0.5
             p.grad.zero_()
             
         final_loss = self.compute_loss(x, y)
