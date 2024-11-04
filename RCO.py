@@ -306,3 +306,37 @@ class RCO_Batching(Optimizer):
     def get_lr(self):
         """Returns current learning rate for scheduler compatibility"""
         return [group['lr'] for group in self.param_groups]
+
+
+for minst:
+
+loss_function = nn.CrossEntropyLoss()
+optimizer = RCO(
+    params=net.parameters(),
+    loss_function=loss_function,  # Your cross entropy loss
+    lr=0.5,
+    accumulation_steps=1,  # Adjust based on your memory constraints
+    max_batch_size=batch_size  # Use your existing batch size
+)
+
+# Training loop
+losses = []
+for i, (images, labels) in enumerate(train_gen):
+        # Move data to GPU
+        images = images.view(-1, 28*28).cuda()
+        labels = labels.cuda()
+        
+        def closure():
+            optimizer.zero_grad()
+            outputs = net(images)
+            loss = loss_function(outputs, labels)
+            loss.backward()
+            return loss
+        
+        # Compute loss and update in one step
+        loss = optimizer.step(closure)
+        losses.append(loss.item())   
+    
+plt.plot(losses)
+
+ie everything happens inside the model
