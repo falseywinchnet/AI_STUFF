@@ -67,6 +67,7 @@ class RCO(Optimizer):
   def __init__(self, model):  # Add clip_value parameter
         self.model = model
         self.lr2 = 1.0
+        self.odd = 1
 
 
     def compute_loss(self, x, y):
@@ -74,7 +75,12 @@ class RCO(Optimizer):
         return torch.mean((y_pred - y)**2)
         
     def step(self, x, y):
-        self.lr2 = max(self.lr2 * 0.9995, 0.5)
+        if self.odd:
+          self.lr2 = max(self.lr2 * 0.9995, 0.5)
+        else:
+          self.lr2 = min(self.lr2 * 1.0001, 1.0)
+
+        self.odd = not self.odd
         # Initial k1
         loss = self.compute_loss(x, y)
         loss.backward()
@@ -178,7 +184,8 @@ class RCO_Batching(Optimizer):
         self.model = model
         self.max_batch_size = max_batch_size
         self.lr2 = 1.0
-        
+        self.odd = 1
+
         # Pre-compute constants
         pi = torch.tensor(math.pi)
         sqrt_5 = torch.sqrt(torch.tensor(5.0))
@@ -207,7 +214,10 @@ class RCO_Batching(Optimizer):
         """
         Performs a single optimization step using combined RK4-Chebyshev method.
         """
-        self.lr2 = max(self.lr2 * 0.9995, 0.5)
+        if self.odd:
+          self.lr2 = max(self.lr2 * 0.9995, 0.5)
+        else:
+          self.lr2 = min(self.lr2 * 1.0001, 1.0)
         
         # Initial k1
         loss = self.compute_loss(x, y)
