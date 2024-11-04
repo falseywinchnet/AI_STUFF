@@ -152,7 +152,7 @@ class RCO(Optimizer):
         # Combine RK4 result
         rk4_update = []
         for k1_p, k2_p, k3_p, k4_p in zip(k1, k2_rk4, k3_rk4, k4_rk4):
-            update = (k1_p + 2*k2_p + 2*k3_p + k4_p)/(6*self.lr2)
+            update = (k1_p + 2*k2_p + 3*k3_p + k4_p)/(6*self.lr2)
             rk4_update.append(update)
             
         # Combine Cheb result
