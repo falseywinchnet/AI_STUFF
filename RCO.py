@@ -1,3 +1,8 @@
+"""
+      Runge-Kutta-Chebyshev Optimizer (RCO) 2024 copyright joshuah rainstar joshuah.rainstar@gmail.com
+      licensed under MIT license
+"""
+
 from torch.optim import Optimizer
 class RCO(Optimizer):
     """
