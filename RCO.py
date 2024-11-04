@@ -74,7 +74,7 @@ class RCO(Optimizer):
         return torch.mean((y_pred - y)**2)
         
     def step(self, x, y):
-        self.lr2 = self.lr2 * 0.9995
+        self.lr2 = max(self.lr2 * 0.9995, 0.5)
         # Initial k1
         loss = self.compute_loss(x, y)
         loss.backward()
@@ -207,7 +207,7 @@ class RCO_Batching(Optimizer):
         """
         Performs a single optimization step using combined RK4-Chebyshev method.
         """
-        self.lr2 = self.lr2 * 0.9995
+        self.lr2 = max(self.lr2 * 0.9995, 0.5)
         
         # Initial k1
         loss = self.compute_loss(x, y)
