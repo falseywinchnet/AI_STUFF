@@ -340,3 +340,124 @@ for i, (images, labels) in enumerate(train_gen):
 plt.plot(losses)
 
 ie everything happens inside the model
+
+\
+
+
+class MomentumPIDScheduler(_LRScheduler):
+    """
+    PID Learning Rate Scheduler with Loss Momentum and Nesterov Look-ahead
+    """
+    def __init__(self, optimizer, 
+                 kp=0.1, ki=0.01, kd=0.001,
+                 momentum=0.9, nesterov=True,
+                 min_lr=1e-6, max_lr=1.0,
+                 window_size=5, verbose=False):
+        
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+        self.momentum = momentum
+        self.nesterov = nesterov
+        self.min_lr = min_lr
+        self.max_lr = max_lr
+        
+        # State variables
+        self.loss_history = []
+        self.window_size = window_size
+        self.integral_error = 0
+        self.last_error = None
+        self.velocity = 0  # momentum velocity
+        self.initial_lrs = [group['lr'] for group in optimizer.param_groups]
+        
+        super().__init__(optimizer, last_epoch=-1, verbose=verbose)
+
+    def compute_momentum_pid_adjustment(self, loss):
+        self.loss_history.append(loss)
+        if len(self.loss_history) > self.window_size:
+            self.loss_history.pop(0)
+            
+        if len(self.loss_history) < 2:
+            return 1.0
+            
+        # Compute loss change with momentum
+        current_loss = self.loss_history[-1]
+        prev_loss = self.loss_history[-2]
+        raw_delta = (current_loss - prev_loss) / prev_loss
+        
+        # Apply momentum to loss delta
+        self.velocity = (self.momentum * self.velocity + 
+                        (1 - self.momentum) * raw_delta)
+        
+        # Nesterov look-ahead if enabled
+        error = self.velocity
+        if self.nesterov:
+            error = self.velocity + self.momentum * (self.velocity - self.last_error) if self.last_error is not None else self.velocity
+            
+        # P term
+        p_term = self.kp * error
+        
+        # I term with momentum decay
+        self.integral_error = (self.momentum * self.integral_error + 
+                             (1 - self.momentum) * error)
+        i_term = self.ki * self.integral_error
+        
+        # D term on momentum-smoothed signal
+        if self.last_error is not None:
+            d_term = self.kd * (error - self.last_error)
+        else:
+            d_term = 0
+        self.last_error = error
+        
+        # Combine terms and convert to multiplicative factor
+        pid_output = -(p_term + i_term + d_term)
+        adjustment = math.exp(pid_output)
+        
+        # Clip the adjustment
+        return max(self.min_lr, min(self.max_lr, adjustment))
+
+    def step(self, loss=None):
+        if loss is None:
+            raise ValueError("Loss value required for momentum PID scheduling")
+            
+        adjustment = self.compute_momentum_pid_adjustment(loss)
+        
+        for i, group in enumerate(self.optimizer.param_groups):
+            group['lr'] = self.initial_lrs[i] * adjustment
+            
+        self._last_lr = [group['lr'] for group in self.optimizer.param_groups]
+
+    def state_dict(self):
+        return {
+            'velocity': self.velocity,
+            'integral_error': self.integral_error,
+            'last_error': self.last_error,
+            'loss_history': self.loss_history,
+            'initial_lrs': self.initial_lrs
+        }
+
+    def load_state_dict(self, state_dict):
+        self.__dict__.update(state_dict)
+
+
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+scheduler = MomentumPIDScheduler(
+    optimizer,
+    kp=0.1,
+    ki=0.01,
+    kd=0.001,
+    momentum=0.9,
+    nesterov=True
+)
+
+# Training loop
+for epoch in range(epochs):
+    for batch in dataloader:
+        optimizer.zero_grad()
+        loss = criterion(model(inputs), targets)
+        loss.backward()
+        optimizer.step()
+        scheduler.step(loss.item())
+
+note: this scheduler is a last minute conceptual idea and has not been tested. 
+i simply wanted to try to see if PID theory could work instead of adam.
