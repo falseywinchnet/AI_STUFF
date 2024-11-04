@@ -176,10 +176,12 @@ from torch.optim.optimizer import Optimizer
 import torch
 import math
 
+
 class RCO_Batching(Optimizer):
     """
     Runge-Kutta-Chebyshev Optimizer (RCO) with batching support, featuring self-decaying learning rate
-    some problems require clamping- i have added clamping.
+    batching necessitates lowering the learn rate- this may not beat adam
+    it also required clamping, depending on the problem.. YRMV
     """
     def __init__(self, model, max_batch_size=None):
         self.model = model
@@ -232,7 +234,7 @@ class RCO_Batching(Optimizer):
         
         # RK4 steps
         for p, k in zip(self.model.parameters(), k1):
-            p.data -= k * (6 * self.lr2)
+            p.data -= k * ((6/  x.size(0)) * self.lr2)
         loss = self.compute_loss(x, y)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
@@ -243,7 +245,7 @@ class RCO_Batching(Optimizer):
         for p, orig in zip(self.model.parameters(), orig_params):
             p.data.copy_(orig)
         for p, k in zip(self.model.parameters(), k2_rk4):
-            p.data -= k * (4 * self.lr2)
+            p.data -= k * ((4/  x.size(0)) * self.lr2)
         loss = self.compute_loss(x, y)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
@@ -254,7 +256,7 @@ class RCO_Batching(Optimizer):
         for p, orig in zip(self.model.parameters(), orig_params):
             p.data.copy_(orig)
         for p, k in zip(self.model.parameters(), k3_rk4):
-            p.data -= k * (12 * self.lr2)
+            p.data -= k * ((12/  x.size(0)) * self.lr2)
         loss = self.compute_loss(x, y)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
@@ -267,9 +269,9 @@ class RCO_Batching(Optimizer):
             p.data.copy_(orig)
             
         # Chebyshev nodes with learning rate
-        c1 = (12 * self.lr2) * (1 + self.cos_3pi8)/2
-        c2 = (12 * self.lr2) * (1 + self.cos_pi8)/2
-        c3 = (12 * self.lr2) * (1 - self.cos_pi8)/2
+        c1 = ((12/  x.size(0)) * self.lr2) * (1 + self.cos_3pi8)/2
+        c2 = ((12/  x.size(0)) * self.lr2) * (1 + self.cos_pi8)/2
+        c3 = ((12/  x.size(0)) * self.lr2) * (1 - self.cos_pi8)/2
         
         # k2 Cheb
         for p, k in zip(self.model.parameters(), k1):
@@ -318,7 +320,7 @@ class RCO_Batching(Optimizer):
         # Average the two methods and apply final update
         for i, (p, rk4_u, cheb_u) in enumerate(zip(self.model.parameters(), rk4_update, cheb_update)):
             update = (rk4_u + cheb_u)/2
-            p.data -= update * 0.5
+            p.data -= update * ((12/  x.size(0))*self.lr2 ) 
             p.grad.zero_()
             
         final_loss = self.compute_loss(x, y)
