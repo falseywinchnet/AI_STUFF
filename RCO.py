@@ -1,4 +1,5 @@
-class RCO:
+from torch.optim import Optimizer
+class RCO(Optimizer):
     """
       Runge-Kutta-Chebyshev Optimizer (RCO) - A neural network optimizer that combines 
       4th order Runge-Kutta method and Chebyshev polynomial interpolation with Adam-style 
@@ -58,24 +59,51 @@ class RCO:
       >>> for epoch in range(num_epochs):
       ...     loss = optimizer.step(x_batch, y_batch)
      """
-    def __init__(self, model, lr=1e-3, betas=(0.9, 0.999), eps=1e-8):
+    def __init__(self, model, lr=0.5, eps=1e-8, clip_value=1.0):  # Add clip_value parameter
         self.model = model
         self.lr = lr
-        self.beta1, self.beta2 = betas
         self.eps = eps
-        self.m = [torch.zeros_like(p) for p in model.parameters()]
-        self.v = [torch.zeros_like(p) for p in model.parameters()]
-        self.t = 0
+        self.clip_value = clip_value
+        self.prev_loss = None
+        self.initial_lr = lr
+        self.min_lr = 1e-12
+        self.lr2 = lr
+    
+    def adjust_learning_rate(self, current_loss):
+        """Adjust learning rate based on loss progression"""
+        if self.prev_loss is None:
+            self.prev_loss = current_loss
+            return self.lr
+            
+        # Calculate relative error reduction
+        error_ratio = current_loss / (self.prev_loss + self.eps)
+        
+        # If error is reducing effectively, maintain lr
+        # If error reduction slows, gradually reduce lr
+        if error_ratio > 0.99:  # Loss reduction is stalling
+            self.lr2 = max(
+                self.lr2 * (1 - 0.001 * error_ratio),
+                self.min_lr
+            )
+        elif error_ratio < 0.7:  # Strong improvement
+            self.lr2 = min(
+                self.lr2 * 1.05,
+                self.initial_lr
+            )
+            
+        self.prev_loss = current_loss
+        return self.lr2
 
     def compute_loss(self, x, y):
         y_pred = self.model(x)
         return torch.mean((y_pred - y)**2)
+      
         
     def step(self, x, y):
-        self.t += 1  # Add this at the start!
-
         # Initial k1
         loss = self.compute_loss(x, y)
+        self.lr2 = self.adjust_learning_rate(loss)
+
         loss.backward()
         k1 = [p.grad.clone() for p in self.model.parameters()]
         
@@ -83,9 +111,8 @@ class RCO:
         orig_params = [p.data.clone() for p in self.model.parameters()]
         
         # RK4
-        # Move to k2 position and evaluate
         for p, k in zip(self.model.parameters(), k1):
-            p.data-= k /2 * self.lr
+            p.data -= k / 2 * self.lr
         loss = self.compute_loss(x, y)
         loss.backward()
         k2_rk4 = [p.grad.clone() for p in self.model.parameters()]
@@ -94,8 +121,7 @@ class RCO:
         for p, orig in zip(self.model.parameters(), orig_params):
             p.data.copy_(orig)
         for p, k in zip(self.model.parameters(), k2_rk4):
-            p.data-= k /3 * self.lr
-
+            p.data -= k / 3 * self.lr
         loss = self.compute_loss(x, y)
         loss.backward()
         k3_rk4 = [p.grad.clone() for p in self.model.parameters()]
@@ -104,7 +130,7 @@ class RCO:
         for p, orig in zip(self.model.parameters(), orig_params):
             p.data.copy_(orig)
         for p, k in zip(self.model.parameters(), k3_rk4):
-            p.data-= k * self.lr
+            p.data -= k * self.lr
         loss = self.compute_loss(x, y)
         loss.backward()
         k4_rk4 = [p.grad.clone() for p in self.model.parameters()]
@@ -121,7 +147,7 @@ class RCO:
         
         # k2 Cheb
         for p, k in zip(self.model.parameters(), k1):
-            p.data-= k * c1
+            p.data -= k * c1
         loss = self.compute_loss(x, y)
         loss.backward()
         k2_cheb = [p.grad.clone() for p in self.model.parameters()]
@@ -130,7 +156,7 @@ class RCO:
         for p, orig in zip(self.model.parameters(), orig_params):
             p.data.copy_(orig)
         for p, k in zip(self.model.parameters(), k2_cheb):
-            p.data-= k * c2
+            p.data -= k * c2
         loss = self.compute_loss(x, y)
         loss.backward()
         k3_cheb = [p.grad.clone() for p in self.model.parameters()]
@@ -139,7 +165,7 @@ class RCO:
         for p, orig in zip(self.model.parameters(), orig_params):
             p.data.copy_(orig)
         for p, k in zip(self.model.parameters(), k3_cheb):
-               p.data-= k * c3
+            p.data -= k * c3
         loss = self.compute_loss(x, y)
         loss.backward()
         k4_cheb = [p.grad.clone() for p in self.model.parameters()]
@@ -147,25 +173,25 @@ class RCO:
         # Combine RK4 result
         rk4_update = []
         for k1_p, k2_p, k3_p, k4_p in zip(k1, k2_rk4, k3_rk4, k4_rk4):
-            rk4_update.append((k1_p + 2*k2_p + 2*k3_p + k4_p)/6)  # Add normalization
+            update = (k1_p + 2*k2_p + 2*k3_p + k4_p)/6
+            rk4_update.append(update)
             
         # Combine Cheb result
         w1 = w2 = (18 + 5*np.sqrt(5))/72
         w3 = w4 = (18 - 5*np.sqrt(5))/72
         cheb_update = []
         for k1_p, k2_p, k3_p, k4_p in zip(k1, k2_cheb, k3_cheb, k4_cheb):
-            cheb_update.append((w1*k1_p + w2*k2_p + w3*k3_p + w4*k4_p)/6)
+            update = (w1*k1_p + w2*k2_p + w3*k3_p + w4*k4_p)/6
+            cheb_update.append(update)
             
-        # Average the two methods and update with Adam
+        # Average the two methods and apply final clipping
         for i, (p, rk4_u, cheb_u) in enumerate(zip(self.model.parameters(), rk4_update, cheb_update)):
-            update = (rk4_u + cheb_u)/2            
-            p.data-=  update * self.lr
+            update = (rk4_u + cheb_u)/2
+            p.data -= update * self.lr2
             p.grad.zero_()
             
-        # Final loss computation for tracking
         final_loss = self.compute_loss(x, y)
         return final_loss.item()
-
 
 
 from torch.optim.optimizer import Optimizer
@@ -344,120 +370,3 @@ ie everything happens inside the model
 \
 
 
-class MomentumPIDScheduler(_LRScheduler):
-    """
-    PID Learning Rate Scheduler with Loss Momentum and Nesterov Look-ahead
-    """
-    def __init__(self, optimizer, 
-                 kp=0.1, ki=0.01, kd=0.001,
-                 momentum=0.9, nesterov=True,
-                 min_lr=1e-6, max_lr=1.0,
-                 window_size=5, verbose=False):
-        
-        self.kp = kp
-        self.ki = ki
-        self.kd = kd
-        self.momentum = momentum
-        self.nesterov = nesterov
-        self.min_lr = min_lr
-        self.max_lr = max_lr
-        
-        # State variables
-        self.loss_history = []
-        self.window_size = window_size
-        self.integral_error = 0
-        self.last_error = None
-        self.velocity = 0  # momentum velocity
-        self.initial_lrs = [group['lr'] for group in optimizer.param_groups]
-        
-        super().__init__(optimizer, last_epoch=-1, verbose=verbose)
-
-    def compute_momentum_pid_adjustment(self, loss):
-        self.loss_history.append(loss)
-        if len(self.loss_history) > self.window_size:
-            self.loss_history.pop(0)
-            
-        if len(self.loss_history) < 2:
-            return 1.0
-            
-        # Compute loss change with momentum
-        current_loss = self.loss_history[-1]
-        prev_loss = self.loss_history[-2]
-        raw_delta = (current_loss - prev_loss) / prev_loss
-        
-        # Apply momentum to loss delta
-        self.velocity = (self.momentum * self.velocity + 
-                        (1 - self.momentum) * raw_delta)
-        
-        # Nesterov look-ahead if enabled
-        error = self.velocity
-        if self.nesterov:
-            error = self.velocity + self.momentum * (self.velocity - self.last_error) if self.last_error is not None else self.velocity
-            
-        # P term
-        p_term = self.kp * error
-        
-        # I term with momentum decay
-        self.integral_error = (self.momentum * self.integral_error + 
-                             (1 - self.momentum) * error)
-        i_term = self.ki * self.integral_error
-        
-        # D term on momentum-smoothed signal
-        if self.last_error is not None:
-            d_term = self.kd * (error - self.last_error)
-        else:
-            d_term = 0
-        self.last_error = error
-        
-        # Combine terms and convert to multiplicative factor
-        pid_output = -(p_term + i_term + d_term)
-        adjustment = math.exp(pid_output)
-        
-        # Clip the adjustment
-        return max(self.min_lr, min(self.max_lr, adjustment))
-
-    def step(self, loss=None):
-        if loss is None:
-            raise ValueError("Loss value required for momentum PID scheduling")
-            
-        adjustment = self.compute_momentum_pid_adjustment(loss)
-        
-        for i, group in enumerate(self.optimizer.param_groups):
-            group['lr'] = self.initial_lrs[i] * adjustment
-            
-        self._last_lr = [group['lr'] for group in self.optimizer.param_groups]
-
-    def state_dict(self):
-        return {
-            'velocity': self.velocity,
-            'integral_error': self.integral_error,
-            'last_error': self.last_error,
-            'loss_history': self.loss_history,
-            'initial_lrs': self.initial_lrs
-        }
-
-    def load_state_dict(self, state_dict):
-        self.__dict__.update(state_dict)
-
-
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-scheduler = MomentumPIDScheduler(
-    optimizer,
-    kp=0.1,
-    ki=0.01,
-    kd=0.001,
-    momentum=0.9,
-    nesterov=True
-)
-
-# Training loop
-for epoch in range(epochs):
-    for batch in dataloader:
-        optimizer.zero_grad()
-        loss = criterion(model(inputs), targets)
-        loss.backward()
-        optimizer.step()
-        scheduler.step(loss.item())
-
-note: this scheduler is a last minute conceptual idea and has not been tested. 
-i simply wanted to try to see if PID theory could work instead of adam.
