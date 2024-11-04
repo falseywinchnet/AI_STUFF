@@ -166,26 +166,33 @@ class RCO(Optimizer):
         final_loss = self.compute_loss(x, y)
         return final_loss.item()
 
-
 from torch.optim.optimizer import Optimizer
 import torch
-import numpy as np
+import math
 
 class RCO_Batching(Optimizer):
     """
-    Runge-Kutta-Chebyshev Optimizer (RCO) with batching support and scheduler compatibility.
-    Uses fixed numerical coefficients and combined RK4-Chebyshev method.
+    Runge-Kutta-Chebyshev Optimizer (RCO) with batching support, featuring self-decaying learning rate
     """
-    def __init__(self, params, loss_function=None, max_batch_size=None):
-        defaults = dict()
-        super(RCO_Batching, self).__init__(params, defaults)
-        
+    def __init__(self, model, max_batch_size=None):
+        self.model = model
         self.max_batch_size = max_batch_size
-        self.loss_function = loss_function or torch.nn.CrossEntropyLoss()
+        self.lr2 = 1.0
         
-        # Initialize step counter for scheduler compatibility
-        self.state['step'] = 0
-    
+        # Pre-compute constants
+        pi = torch.tensor(math.pi)
+        sqrt_5 = torch.sqrt(torch.tensor(5.0))
+        self.w1 = self.w2 = (18 + 5*sqrt_5)/72
+        self.w3 = self.w4 = (18 - 5*sqrt_5)/72
+        
+        # Trig constants
+        self.cos_3pi8 = torch.cos(3*pi/8)
+        self.cos_pi8 = torch.cos(pi/8)
+
+    def compute_loss(self, x, y):
+        y_pred = self.model(x)
+        return torch.mean((y_pred - y)**2)
+
     def _split_batch(self, x, y):
         """Split large batches into smaller ones if needed"""
         if self.max_batch_size is None or x.size(0) <= self.max_batch_size:
@@ -196,98 +203,99 @@ class RCO_Batching(Optimizer):
         y_splits = torch.split(y, self.max_batch_size)
         return list(zip(x_splits, y_splits))
 
-    def step(self, closure=None):
+    def step(self, x, y):
         """
         Performs a single optimization step using combined RK4-Chebyshev method.
-        
-        Args:
-            closure (callable): A closure that reevaluates the model and returns the loss.
         """
-        loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
+        self.lr2 = self.lr2 * 0.9995
         
-        for group in self.param_groups:
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-                
-                # Store original params
-                orig_param = p.data.clone()
-                
-                # Initial k1
-                k1 = p.grad.clone()
-                
-                # RK4 steps
-                # k2 position
-                p.data.add_(k1, alpha=-6)
-                if closure is not None:
-                    with torch.enable_grad():
-                        closure()
-                k2_rk4 = p.grad.clone()
-                p.data.copy_(orig_param)
-                
-                # k3 position
-                p.data.add_(k2_rk4, alpha=-4)
-                if closure is not None:
-                    with torch.enable_grad():
-                        closure()
-                k3_rk4 = p.grad.clone()
-                p.data.copy_(orig_param)
-                
-                # k4 position
-                p.data.add_(k3_rk4, alpha=-12)
-                if closure is not None:
-                    with torch.enable_grad():
-                        closure()
-                k4_rk4 = p.grad.clone()
-                p.data.copy_(orig_param)
-                
-                # Chebyshev steps
-                # Chebyshev nodes
-                pi = torch.tensor(math.pi)
-                c1 = 12 * (1 + torch.cos(3*pi/8))/2
-                c2 = 12 * (1 + torch.cos(pi/8))/2
-                c3 = 12 * (1 - torch.cos(pi/8))/2
-                
-                # k2 Cheb
-                p.data.add_(k1, alpha=-c1)
-                if closure is not None:
-                    with torch.enable_grad():
-                        closure()
-                k2_cheb = p.grad.clone()
-                p.data.copy_(orig_param)
-                
-                # k3 Cheb
-                p.data.add_(k2_cheb, alpha=-c2)
-                if closure is not None:
-                    with torch.enable_grad():
-                        closure()
-                k3_cheb = p.grad.clone()
-                p.data.copy_(orig_param)
-                
-                # k4 Cheb
-                p.data.add_(k3_cheb, alpha=-c3)
-                if closure is not None:
-                    with torch.enable_grad():
-                        closure()
-                k4_cheb = p.grad.clone()
-                
-                # Combine RK4 result
-                rk4_update = (k1 + 2*k2_rk4 + 2*k3_rk4 + k4_rk4)/6
-                
-                # Combine Cheb result
-                sqrt_5 = torch.sqrt(torch.tensor(5.0))
-                w1 = w2 = (18 + 5*sqrt_5)/72
-                w3 = w4 = (18 - 5*sqrt_5)/72
-                cheb_update = (w1*k1 + w2*k2_cheb + w3*k3_cheb + w4*k4_cheb)/6
-                
-                # Average the updates and apply
-                update = (rk4_update + cheb_update)/2
-                p.data = orig_param - update * 12
-                p.grad.zero_()
+        # Initial k1
+        loss = self.compute_loss(x, y)
+        loss.backward()
+        k1 = [p.grad.clone() for p in self.model.parameters()]
+        
+        # Store original params
+        orig_params = [p.data.clone() for p in self.model.parameters()]
+        
+        # RK4 steps
+        for p, k in zip(self.model.parameters(), k1):
+            p.data -= k * (6 * self.lr2)
+        loss = self.compute_loss(x, y)
+        loss.backward()
+        k2_rk4 = [p.grad.clone() for p in self.model.parameters()]
+        
+        # Reset and move to k3 position
+        for p, orig in zip(self.model.parameters(), orig_params):
+            p.data.copy_(orig)
+        for p, k in zip(self.model.parameters(), k2_rk4):
+            p.data -= k * (4 * self.lr2)
+        loss = self.compute_loss(x, y)
+        loss.backward()
+        k3_rk4 = [p.grad.clone() for p in self.model.parameters()]
+        
+        # Reset and move to k4
+        for p, orig in zip(self.model.parameters(), orig_params):
+            p.data.copy_(orig)
+        for p, k in zip(self.model.parameters(), k3_rk4):
+            p.data -= k * (12 * self.lr2)
+        loss = self.compute_loss(x, y)
+        loss.backward()
+        k4_rk4 = [p.grad.clone() for p in self.model.parameters()]
+        
+        # Chebyshev steps
+        # Reset for Chebyshev
+        for p, orig in zip(self.model.parameters(), orig_params):
+            p.data.copy_(orig)
+            
+        # Chebyshev nodes with learning rate
+        c1 = (12 * self.lr2) * (1 + self.cos_3pi8)/2
+        c2 = (12 * self.lr2) * (1 + self.cos_pi8)/2
+        c3 = (12 * self.lr2) * (1 - self.cos_pi8)/2
+        
+        # k2 Cheb
+        for p, k in zip(self.model.parameters(), k1):
+            p.data -= k * c1
+        loss = self.compute_loss(x, y)
+        loss.backward()
+        k2_cheb = [p.grad.clone() for p in self.model.parameters()]
+        
+        # k3 Cheb
+        for p, orig in zip(self.model.parameters(), orig_params):
+            p.data.copy_(orig)
+        for p, k in zip(self.model.parameters(), k2_cheb):
+            p.data -= k * c2
+        loss = self.compute_loss(x, y)
+        loss.backward()
+        k3_cheb = [p.grad.clone() for p in self.model.parameters()]
+        
+        # k4 Cheb
+        for p, orig in zip(self.model.parameters(), orig_params):
+            p.data.copy_(orig)
+        for p, k in zip(self.model.parameters(), k3_cheb):
+            p.data -= k * c3
+        loss = self.compute_loss(x, y)
+        loss.backward()
+        k4_cheb = [p.grad.clone() for p in self.model.parameters()]
 
-        return loss
+        # Combine RK4 result
+        rk4_update = []
+        for k1_p, k2_p, k3_p, k4_p in zip(k1, k2_rk4, k3_rk4, k4_rk4):
+            update = (k1_p + 2*k2_p + 2*k3_p + k4_p)/(6*self.lr2)
+            rk4_update.append(update)
+            
+        # Combine Cheb result
+        cheb_update = []
+        for k1_p, k2_p, k3_p, k4_p in zip(k1, k2_cheb, k3_cheb, k4_cheb):
+            update = (self.w1*k1_p + self.w2*k2_p + self.w3*k3_p + self.w4*k4_p)/(6*self.lr2)
+            cheb_update.append(update)
+
+        # Average the two methods and apply final update
+        for i, (p, rk4_u, cheb_u) in enumerate(zip(self.model.parameters(), rk4_update, cheb_update)):
+            update = (rk4_u + cheb_u)/2
+            p.data -= update * (12 * self.lr2)
+            p.grad.zero_()
+            
+        final_loss = self.compute_loss(x, y)
+        return final_loss.item()
 
 
