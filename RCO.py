@@ -1,5 +1,6 @@
 """
       Runge-Kutta-Chebyshev Optimizer (RCO) 2024 copyright joshuah rainstar joshuah.rainstar@gmail.com
+      version 1.0 (11/4/24)
       licensed under MIT license
 """
 
@@ -17,7 +18,9 @@ class RCO(Optimizer):
 
       The optimizer uses four evaluation points for both RK4 and Chebyshev methods,
       providing potentially better convergence properties than traditional first-order
-      methods.
+      methods, but at a much higher per step cost.
+      7x compute cost.. but 4x potentially faster convergence.
+      Notably, this also handles chaotic data better.
 
       Parameters
       ----------
