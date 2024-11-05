@@ -163,33 +163,35 @@ import math
 class RCO_Batching(Optimizer):
     """
     Runge-Kutta-Chebyshev Optimizer (RCO) with batching support, featuring self-decaying learning rate
-    batching necessitates lowering the learn rate- this may not beat adam on some problems
-    
+    batching necessitates lowering the learn rate- this may not beat adam
+    i am still experimenting with this
     it also required clamping, depending on the problem.. YRMV
     """
     def __init__(self, model, max_batch_size=None):
         self.model = model
+        self.loss_fn = nn.CrossEntropyLoss()
         self.max_batch_size = max_batch_size
         self.scaling_factor = 0.9
 
         # Pre-compute constants
         pi = torch.tensor(math.pi)
-        self.w1 = self.w2 = 4/3
-        self.w3 = self.w4 =  4/3
-        
+
+
         # Trig constants
-        self.cos_3pi8 = torch.cos(3*pi/8)
-        self.cos_pi8 = torch.cos(pi/8)
+        self.w1 = 0.21967452022181430116
+        self.w2 = 0.23876183658069730087
+        self.w3 = 0.25950763224531042672
+        self.w4 = 0.28205601095217797125
 
     def compute_loss(self, x, y):
         y_pred = self.model(x)
-        return torch.mean((y_pred - y)**2)
+        return self.loss_fn(y_pred, y)
 
     def _split_batch(self, x, y):
         """Split large batches into smaller ones if needed"""
         if self.max_batch_size is None or x.size(0) <= self.max_batch_size:
             return [(x, y)]
-            
+
         num_splits = (x.size(0) + self.max_batch_size - 1) // self.max_batch_size
         x_splits = torch.split(x, self.max_batch_size)
         y_splits = torch.split(y, self.max_batch_size)
@@ -202,22 +204,22 @@ class RCO_Batching(Optimizer):
         # Initial k1
         loss = self.compute_loss(x, y)
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=100.0)  # Fixed line
 
         k1 = [p.grad.clone() for p in self.model.parameters()]
-        
+
         # Store original params
         orig_params = [p.data.clone() for p in self.model.parameters()]
-        
+
         # RK4 steps
         for p, k in zip(self.model.parameters(), k1):
             p.data -= k * ((6/  x.size(0)))
         loss = self.compute_loss(x, y)
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=100.0)  # Fixed line
 
         k2_rk4 = [p.grad.clone() for p in self.model.parameters()]
-        
+
         # Reset and move to k3 position
         for p, orig in zip(self.model.parameters(), orig_params):
             p.data.copy_(orig)
@@ -225,10 +227,10 @@ class RCO_Batching(Optimizer):
             p.data -= k * ((4/  x.size(0)))
         loss = self.compute_loss(x, y)
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=100.0)  # Fixed line
 
         k3_rk4 = [p.grad.clone() for p in self.model.parameters()]
-        
+
         # Reset and move to k4
         for p, orig in zip(self.model.parameters(), orig_params):
             p.data.copy_(orig)
@@ -236,20 +238,21 @@ class RCO_Batching(Optimizer):
             p.data -= k * ((12/  x.size(0)))
         loss = self.compute_loss(x, y)
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=100.0)  # Fixed line
 
         k4_rk4 = [p.grad.clone() for p in self.model.parameters()]
-        
+
         # Chebyshev steps
         # Reset for Chebyshev
         for p, orig in zip(self.model.parameters(), orig_params):
             p.data.copy_(orig)
-            
+
         # Chebyshev nodes with learning rate
-        c1 = ((12/  x.size(0))) * (1 + self.cos_3pi8)/2
-        c2 = ((12/  x.size(0))) * (1 + self.cos_pi8)/2
-        c3 = ((12/  x.size(0))) * (1 - self.cos_pi8)/2
-        
+        c1 = ((12/  x.size(0))) *1/11
+        c2 = ((12/  x.size(0))) * 2/11
+        c3 = ((12/  x.size(0))) * 3/11
+        c4 = ((12/  x.size(0))) * 4/11
+
         # k2 Cheb
         for p, k in zip(self.model.parameters(), k1):
             p.data -= k * c1
@@ -259,7 +262,7 @@ class RCO_Batching(Optimizer):
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
 
         k2_cheb = [p.grad.clone() for p in self.model.parameters()]
-        
+
         # k3 Cheb
         for p, orig in zip(self.model.parameters(), orig_params):
             p.data.copy_(orig)
@@ -270,7 +273,7 @@ class RCO_Batching(Optimizer):
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
 
         k3_cheb = [p.grad.clone() for p in self.model.parameters()]
-        
+
         # k4 Cheb
         for p, orig in zip(self.model.parameters(), orig_params):
             p.data.copy_(orig)
@@ -282,25 +285,34 @@ class RCO_Batching(Optimizer):
 
         k4_cheb = [p.grad.clone() for p in self.model.parameters()]
 
+                # k5 Cheb
+        for p, orig in zip(self.model.parameters(), orig_params):
+            p.data.copy_(orig)
+        for p, k in zip(self.model.parameters(), k4_cheb):
+            p.data -= k * c4
+        loss = self.compute_loss(x, y)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
+
+        k5_cheb = [p.grad.clone() for p in self.model.parameters()]
+
         # Combine RK4 result
         rk4_update = []
         for k1_p, k2_p, k3_p, k4_p in zip(k1, k2_rk4, k3_rk4, k4_rk4):
-            update = (k1_p + 2*k2_p + 3*k3_p + k4_p)/((6))
+            update = (k1_p + 2*k2_p + 2*k3_p + k4_p)/((6))
             rk4_update.append(update)
-            
+
         # Combine Cheb result
         cheb_update = []
-        for k1_p, k2_p, k3_p, k4_p in zip(k1, k2_cheb, k3_cheb, k4_cheb):
-            update = (self.w1*k1_p + self.w2*k2_p + self.w3*k3_p + self.w4*k4_p)/(16)
+        for k1_p, k2_p, k3_p, k4_p in zip( k2_cheb, k3_cheb, k4_cheb,k5_cheb):
+            update = (self.w1*k1_p + self.w2*k2_p + self.w3*k3_p + self.w4*k4_p)
             cheb_update.append(update)
 
         # Average the two methods and apply final update
         for i, (p, rk4_u, cheb_u) in enumerate(zip(self.model.parameters(), rk4_update, cheb_update)):
             update = (rk4_u + cheb_u)/2
-            p.data -=( update * ((12/  x.size(0))) ) *self.scaling_factor
+            p.data -=( update / ((x.size(0))) )
             p.grad.zero_()
-            
+
         final_loss = self.compute_loss(x, y)
         return final_loss.item()
-
-
