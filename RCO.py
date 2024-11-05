@@ -167,21 +167,21 @@ class RCO(Optimizer):
         return final_loss.item()
 
 
+
 from torch.optim.optimizer import Optimizer
 import torch
 import math
 
-
 class RCO_Batching(Optimizer):
     """
     Runge-Kutta-Chebyshev Optimizer (RCO) with batching support, featuring self-decaying learning rate
-    batching necessitates lowering the learn rate- this may not beat adam
+    batching necessitates lowering the learn rate- this may not beat adam on some problems
+    
     it also required clamping, depending on the problem.. YRMV
     """
     def __init__(self, model, max_batch_size=None):
         self.model = model
         self.max_batch_size = max_batch_size
-        self.lr2 = 1.0
         self.scaling_factor = 0.9
 
         # Pre-compute constants
@@ -297,13 +297,13 @@ class RCO_Batching(Optimizer):
         # Combine RK4 result
         rk4_update = []
         for k1_p, k2_p, k3_p, k4_p in zip(k1, k2_rk4, k3_rk4, k4_rk4):
-            update = (k1_p + 2*k2_p + 3*k3_p + k4_p)/((6)/  x.size(0))
+            update = (k1_p + 2*k2_p + 3*k3_p + k4_p)/((6))
             rk4_update.append(update)
             
         # Combine Cheb result
         cheb_update = []
         for k1_p, k2_p, k3_p, k4_p in zip(k1, k2_cheb, k3_cheb, k4_cheb):
-            update = (self.w1*k1_p + self.w2*k2_p + self.w3*k3_p + self.w4*k4_p)/((16)/  x.size(0))
+            update = (self.w1*k1_p + self.w2*k2_p + self.w3*k3_p + self.w4*k4_p)/(16)
             cheb_update.append(update)
 
         # Average the two methods and apply final update
