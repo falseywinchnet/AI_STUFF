@@ -8,8 +8,7 @@ from torch.optim import Optimizer
 class RCO(Optimizer):
     """
       Runge-Kutta-Chebyshev Optimizer (RCO) - A neural network optimizer that combines 
-      4th order Runge-Kutta method and Chebyshev polynomial interpolation with Adam-style 
-      momentum.
+      4th order Runge-Kutta method and Chebyshev polynomial interpolation
 
       This optimizer implements a novel approach to neural network optimization by:
       1. Computing gradients using both RK4 and Chebyshev methods
@@ -224,7 +223,7 @@ class RCO_Batching(Optimizer):
         
         # RK4 steps
         for p, k in zip(self.model.parameters(), k1):
-            p.data -= k * ((6/  x.size(0)) * self.lr2)
+            p.data -= k * ((6/  x.size(0)))
         loss = self.compute_loss(x, y)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
@@ -235,7 +234,7 @@ class RCO_Batching(Optimizer):
         for p, orig in zip(self.model.parameters(), orig_params):
             p.data.copy_(orig)
         for p, k in zip(self.model.parameters(), k2_rk4):
-            p.data -= k * ((4/  x.size(0)) * self.lr2)
+            p.data -= k * ((4/  x.size(0)))
         loss = self.compute_loss(x, y)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
@@ -246,7 +245,7 @@ class RCO_Batching(Optimizer):
         for p, orig in zip(self.model.parameters(), orig_params):
             p.data.copy_(orig)
         for p, k in zip(self.model.parameters(), k3_rk4):
-            p.data -= k * ((12/  x.size(0)) * self.lr2)
+            p.data -= k * ((12/  x.size(0)))
         loss = self.compute_loss(x, y)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Fixed line
@@ -259,9 +258,9 @@ class RCO_Batching(Optimizer):
             p.data.copy_(orig)
             
         # Chebyshev nodes with learning rate
-        c1 = ((12/  x.size(0)) * self.lr2) * (1 + self.cos_3pi8)/2
-        c2 = ((12/  x.size(0)) * self.lr2) * (1 + self.cos_pi8)/2
-        c3 = ((12/  x.size(0)) * self.lr2) * (1 - self.cos_pi8)/2
+        c1 = ((12/  x.size(0))) * (1 + self.cos_3pi8)/2
+        c2 = ((12/  x.size(0))) * (1 + self.cos_pi8)/2
+        c3 = ((12/  x.size(0))) * (1 - self.cos_pi8)/2
         
         # k2 Cheb
         for p, k in zip(self.model.parameters(), k1):
@@ -298,13 +297,13 @@ class RCO_Batching(Optimizer):
         # Combine RK4 result
         rk4_update = []
         for k1_p, k2_p, k3_p, k4_p in zip(k1, k2_rk4, k3_rk4, k4_rk4):
-            update = (k1_p + 2*k2_p + 3*k3_p + k4_p)/(6)
+            update = (k1_p + 2*k2_p + 3*k3_p + k4_p)/((6)/  x.size(0))
             rk4_update.append(update)
             
         # Combine Cheb result
         cheb_update = []
         for k1_p, k2_p, k3_p, k4_p in zip(k1, k2_cheb, k3_cheb, k4_cheb):
-            update = (self.w1*k1_p + self.w2*k2_p + self.w3*k3_p + self.w4*k4_p)/(16)
+            update = (self.w1*k1_p + self.w2*k2_p + self.w3*k3_p + self.w4*k4_p)/((16)/  x.size(0))
             cheb_update.append(update)
 
         # Average the two methods and apply final update
